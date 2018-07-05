@@ -1,3 +1,3 @@
 DIAGRAMS := $(wildcard *.puml)
 
-include ../plantuml.mk
+include ./plantuml.mk
