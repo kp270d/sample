@@ -1,0 +1,67 @@
+@startuml
+  title __HP.io <-> HP ID Oauth Integration Framework__
+  actor End_User #blue
+  participant  Developer_App
+  box "Apigee" #LightGrey
+  participant  BU_Edge_Oauth_Proxy #f47a42
+  participant  Central_Org_Oauth_Proxy #f47a42
+  participant  BU_Edge_Resource_Proxy #f47a42
+  end box
+  collections Resource_Server #green
+  database HPID
+  
+  autonumber
+  == Initialization ==
+  End_User -> Developer_App : Get resource API call
+  == HP.io Authorization ==
+  note right of Developer_App : Developer app Request for Authorization \nredirect user to authorize endpoint.
+  Developer_App -->End_User : 302 Redirect user to \nHP.io authorize endpoint.
+  End_User -> BU_Edge_Oauth_Proxy : Authorize \n[ https://<BU>.api.hp.com/hpid/oauth/v1/authorize ]
+  note right of BU_Edge_Oauth_Proxy : BU Edge Oauth proxy \configure BU specific \nOauth Settings and send the request central Oauth Proxy
+  BU_Edge_Oauth_Proxy -> Central_Org_Oauth_Proxy : Authorize \n[https://core.api.hp.com/hpid/oauth/v1/authorize]
+  note right of Central_Org_Oauth_Proxy: Central Oauth proxy cache the request \nredirect the request to HPID login page.
+  Central_Org_Oauth_Proxy --> BU_Edge_Oauth_Proxy : 302 Redirect to HPID Authorize Endpoint \n[https://directory.id.hp.com/directory/v1/oauth/authorize]
+  BU_Edge_Oauth_Proxy --> End_User : 302 Redirect to HPID Authorize Endpoint \n[https://directory.id.hp.com/directory/v1/oauth/authorize]
+  == HPID Authentication ==
+  End_User -> HPID: HPID Authorize Request \n\n[https://directory.id.hp.com/directory/v1/oauth/authorize]
+  note right of HPID: HPID check for existing session, \nand redirect user to HPID login page.
+  HPID --> End_User : 302 Redirect to HPID login page
+  End_User -> HPID : HPID login page
+  note right of HPID: HPID authenticate the user. \nOnce authenticated redirect to the \nBU HPID redirect URL \n[https://<BU>.api.hp.com/hpid/oauth/v1/auth]
+  == HP.io Auth Code Generation ==
+  HPID --> BU_Edge_Oauth_Proxy : https://<BU>.api.hp.com/hpid/oauth/v1/auth
+  note right of BU_Edge_Oauth_Proxy : BU Edge Oauth proxy \configure BU specific \nOauth Setting and send the request central Oauth Proxy
+  BU_Edge_Oauth_Proxy -> Central_Org_Oauth_Proxy : POST[https://core.api.hp.com/hpid/oauth/v1/auth]
+  note right of Central_Org_Oauth_Proxy: Central Oauth proxy retrieve original request from cache \nexchange HPID authcode for HPID token.
+  Central_Org_Oauth_Proxy -> HPID: Exchange HPID authcode \nto get HPID access token \n[https://directory.id.hp.com/directory/v1/oauth/token]
+  note right of HPID: HPID validates the Auth code and Generate access token
+  HPID --> Central_Org_Oauth_Proxy: Token Response
+  note right of Central_Org_Oauth_Proxy: If BU proxy is configured to do \n User Authorization \ncentral proxy make a call out BU Proxy to do User authorization
+  Central_Org_Oauth_Proxy --> BU_Edge_Oauth_Proxy: Request BU org to \n authorize user using the HPID Token with any other system.
+  BU_Edge_Oauth_Proxy -> Central_Org_Oauth_Proxy: User Auth response from BU proxy
+  note right of Central_Org_Oauth_Proxy: Central proxy generated a HP.io auth code \nand attach HPID token and user Auth \nas custom attributes 
+  Central_Org_Oauth_Proxy --> BU_Edge_Oauth_Proxy: 302 redirect \nto developer application HP.io redirect uri
+  BU_Edge_Oauth_Proxy --> End_User: 302 redirect \nto application HP.io redirect uri
+  End_User -> Developer_App : redirect to application url with Auth code.
+  note right of Developer_App: Developer app extracts the Auth code \nand request HP.io access token
+  == HP.io Access Token Generation ==
+  Developer_App -> BU_Edge_Oauth_Proxy: Token request \n[https://<BU>.api.hp.com/hpid/oauth/v1/token]
+  note right of BU_Edge_Oauth_Proxy : BU Edge Oauth proxy \configure BU specific \nOauth Settings and send the request central Oauth Proxy
+  BU_Edge_Oauth_Proxy -> Central_Org_Oauth_Proxy : Token request \n[https://core.api.hp.com/hpid/oauth/v1/token]
+  note right of Central_Org_Oauth_Proxy: Central proxy generated a HP.io access token \nwith all the custom attributes propagated form Auth code \nand all the custom claims included.
+  Central_Org_Oauth_Proxy --> BU_Edge_Oauth_Proxy : Access Token Response
+  BU_Edge_Oauth_Proxy --> Developer_App : Access Token Reponses
+  note right of Developer_App : Developer App extracts the token \nand a make a service/resource request.
+  == Resource API Call ==
+  Developer_App -> BU_Edge_Resource_Proxy: Service/Resource Request [Bearer Access Token]
+  note right of BU_Edge_Resource_Proxy : BU edge proxy make validate call to \ncentral proxy to validate token.
+  BU_Edge_Resource_Proxy -> Central_Org_Oauth_Proxy : Validate token
+  Central_Org_Oauth_Proxy --> BU_Edge_Resource_Proxy : Validate response
+  BU_Edge_Resource_Proxy -> Resource_Server : Resource Request
+  Resource_Server --> BU_Edge_Resource_Proxy : Requested Resource
+  BU_Edge_Resource_Proxy --> Developer_App : Requested Resource
+  Developer_App --> End_User : Requested Resource
+   
+  
+  @enduml
+  @author muraleek
