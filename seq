@@ -1,6 +1,6 @@
 @startuml
   title __HP.io <-> HP ID Oauth Integration Framework__
-  actor End_User #blue
+  actor End_User #red
   participant  Developer_App
   box "Apigee" #LightGrey
   participant  BU_Edge_Oauth_Proxy #f47a42
